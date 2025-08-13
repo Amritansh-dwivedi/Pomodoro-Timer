@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pomodoro Timer</title>
+  <meta name="description" content="A clean Pomodoro timer with short & long breaks, rounds, progress ring, sounds, and keyboard shortcuts."/>
+  <style>
+    :root{
+      --bg: #0f172a;          /* slate-900 */
+      --panel: #111827;       /* gray-900 */
+      --text: #e5e7eb;        /* gray-200 */
+      --muted: #94a3b8;       /* slate-400 */
+      --accent: #22c55e;      /* green-500 */
+      --accent-2: #3b82f6;    /* blue-500 */
+      --danger: #ef4444;      /* red-500 */
+      --border: #1f2937;      /* gray-800 */
+      --ring: #2563eb;        /* blue-600 */
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg:#f8fafc; --panel:#ffffff; --text:#0f172a; --muted:#475569; --border:#e5e7eb;
+      }
+    }
+    *{ box-sizing:border-box }
+    html,body{ height:100%; margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial; background:
+      radial-gradient(1100px 600px at 0% -20%, #1f2937 0%, transparent 60%),
+      radial-gradient(800px 500px at 100% 100%, #1e293b 0%, transparent 60%), var(--bg); color:var(--text) }
+    .wrap{ max-width:900px; margin:40px auto; padding:0 16px }
+    header{ text-align:center; margin-bottom:18px }
+    header h1{ margin:0 0 8px }
+    header p{ margin:0; color:var(--muted) }
+
+    .card{ background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.12) }
+
+    .modes{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:10px }
+    .tab{ border:1px solid var(--border); background:transparent; color:var(--text); padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:600 }
+    .tab[aria-selected="true"]{ background:color-mix(in oklab, var(--accent-2) 20%, transparent); border-color:color-mix(in oklab, var(--accent-2) 50%, var(--border)) }
+
+    .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:center }
+    @media (max-width:740px){ .grid{ grid-template-columns: 1fr } }
+
+    .center{ display:grid; place-items:center }
+
+    /* Timer circle */
+    .timer{ position:relative; width:min(360px, 70vw); aspect-ratio:1; }
+    .timer svg{ width:100%; height:100% }
+    .time-text{ position:absolute; inset:0; display:grid; place-items:center; text-align:center }
+    .time-text h2{ font-size: clamp(2rem, 7vw, 3rem); margin:0 }
+    .time-text small{ color:var(--muted) }
+
+    .controls{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:12px }
+    .btn{ border:none; border-radius:12px; padding:12px 14px; font-weight:700; cursor:pointer }
+    .btn.primary{ background:var(--accent); color:white }
+    .btn.secondary{ background:transparent; color:var(--text); border:1px solid var(--border) }
+    .btn.danger{ background:transparent; color:var(--danger); border:1px solid color-mix(in oklab, var(--danger) 50%, var(--border)) }
+    .btn:disabled{ opacity:.6; cursor:not-allowed }
+
+    .settings{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:14px }
+    @media (max-width:740px){ .settings{ grid-template-columns: 1fr } }
+    .field{ background:transparent; border:1px solid var(--border); border-radius:14px; padding:12px }
+    .field label{ display:flex; align-items:center; justify-content:space-between; gap:10px; color:var(--muted); font-weight:600 }
+    .field input[type="number"]{ width:90px; max-width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:transparent; color:var(--text) }
+    .field input:focus{ border-color:var(--ring); box-shadow:0 0 0 4px color-mix(in oklab, var(--ring) 20%, transparent); outline:none }
+    .note{ color:var(--muted); margin-top:10px; text-align:center }
+    .footer{ color:var(--muted); margin-top:14px; text-align:center }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🍅 Pomodoro Timer</h1>
+      <p>Focus sessions with short & long breaks • Space = Start/Pause • R = Reset</p>
+    </header>
+
+    <section class="card">
+      <div class="modes" role="tablist" aria-label="Mode">
+        <button class="tab" id="tab-work" role="tab" aria-selected="true" data-mode="work">Focus</button>
+        <button class="tab" id="tab-break" role="tab" aria-selected="false" data-mode="short">Short Break</button>
+        <button class="tab" id="tab-long" role="tab" aria-selected="false" data-mode="long">Long Break</button>
+      </div>
+
+      <div class="grid">
+        <div class="center">
+          <div class="timer" aria-live="polite">
+            <svg viewBox="0 0 120 120">
+              <defs>
+                <linearGradient id="grad" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0%" stop-color="var(--accent)" />
+                  <stop offset="100%" stop-color="var(--accent-2)" />
+                </linearGradient>
+              </defs>
+              <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="8"/>
+              <circle id="progress" cx="60" cy="60" r="54" fill="none" stroke="url(#grad)" stroke-width="8" stroke-linecap="round"
+                      transform="rotate(-90 60 60)" stroke-dasharray="339.292" stroke-dashoffset="339.292"/>
+            </svg>
+            <div class="time-text">
+              <div>
+                <h2 id="time">25:00</h2>
+                <small id="status">Ready</small>
+              </div>
+            </div>
+          </div>
+          <div class="controls">
+            <button id="startPause" class="btn primary">Start</button>
+            <button id="reset" class="btn secondary">Reset</button>
+            <button id="skip" class="btn danger" title="Skip to next">Skip</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="settings">
+            <div class="field">
+              <label>Focus (min)
+                <input id="workMin" type="number" min="1" max="120" value="25" />
+              </label>
+            </div>
+            <div class="field">
+              <label>Short Break (min)
+                <input id="shortMin" type="number" min="1" max="60" value="5" />
+              </label>
+            </div>
+            <div class="field">
+              <label>Long Break (min)
+                <input id="longMin" type="number" min="1" max="60" value="15" />
+              </label>
+            </div>
+            <div class="field">
+              <label>Rounds before Long
+                <input id="roundsToLong" type="number" min="1" max="12" value="4" />
+              </label>
+            </div>
+            <div class="field">
+              <label>Auto Start Next
+                <input id="autoStart" type="checkbox" />
+              </label>
+            </div>
+            <div class="field">
+              <label>Desktop Notification
+                <input id="notify" type="checkbox" />
+              </label>
+            </div>
+          </div>
+          <p class="note">Completed Pomodoros: <strong id="rounds">0</strong></p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <small id="hint">Tip: Adjust minutes and press Start. Space toggles, R resets. ↑/↓ while focused on a number changes it.</small>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ===== Elements
+    const timeEl = document.getElementById('time');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startPause');
+    const resetBtn = document.getElementById('reset');
+    const skipBtn = document.getElementById('skip');
+    const progress = document.getElementById('progress');
+
+    const workMin = document.getElementById('workMin');
+    const shortMin = document.getElementById('shortMin');
+    const longMin = document.getElementById('longMin');
+    const roundsToLong = document.getElementById('roundsToLong');
+    const autoStart = document.getElementById('autoStart');
+    const notify = document.getElementById('notify');
+    const roundsEl = document.getElementById('rounds');
+
+    const tabs = document.querySelectorAll('.tab');
+
+    // ===== State
+    let mode = 'work'; // 'work' | 'short' | 'long'
+    let total = minsToSec(workMin.value);
+    let remaining = total;
+    let timerId = null;
+    let rounds = 0; // completed work sessions
+
+    const CIRC = 2 * Math.PI * 54; // circumference
+
+    function minsToSec(m){ return Math.max(1, Math.floor(Number(m) || 0)) * 60 }
+    function fmt(s){
+      const m = Math.floor(s/60); const r = Math.floor(s%60);
+      return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`;
+    }
+
+    function setMode(next){
+      mode = next;
+      tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.mode===mode)));
+      total = minsToSec(mode==='work' ? workMin.value : mode==='short' ? shortMin.value : longMin.value);
+      remaining = total;
+      updateProgress();
+      render();
+      statusEl.textContent = modeLabel(mode) + ' • Ready';
+      document.title = `⏱️ ${modeLabel(mode)} – ${fmt(remaining)}`;
+      if (timerId) toggle(); // pause if running when user switches
+    }
+
+    function modeLabel(m){ return m==='work' ? 'Focus' : (m==='short' ? 'Short Break' : 'Long Break') }
+
+    function updateProgress(){
+      const frac = 1 - (remaining / total);
+      progress.style.strokeDasharray = CIRC.toFixed(3);
+      progress.style.strokeDashoffset = (CIRC * (1 - frac)).toFixed(3);
+    }
+
+    function render(){ timeEl.textContent = fmt(remaining); }
+
+    // Simple beep using Web Audio API
+    function beep(){
+      try{
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = 880; // A5
+        g.gain.value = 0.001; // start low to avoid pop
+        o.connect(g); g.connect(ctx.destination);
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+        o.stop(ctx.currentTime + 0.32);
+      }catch(e){ /* ignore */ }
+    }
+
+    function notifyDesktop(title, body){
+      if(!notify.checked) return;
+      if('Notification' in window){
+        if(Notification.permission === 'granted') new Notification(title, { body });
+        else if(Notification.permission !== 'denied'){
+          Notification.requestPermission().then(p => { if(p==='granted') new Notification(title, { body }); });
+        }
+      }
+    }
+
+    function finishInterval(){
+      beep();
+      if(mode==='work'){
+        rounds++; roundsEl.textContent = rounds;
+        const cycle = Number(roundsToLong.value) || 4;
+        const next = (rounds % cycle === 0) ? 'long' : 'short';
+        setMode(next);
+        statusEl.textContent = `${modeLabel(mode)} • Started`;
+      } else {
+        setMode('work');
+        statusEl.textContent = 'Focus • Started';
+      }
+      notifyDesktop('Timer finished', `Next: ${modeLabel(mode)}`);
+      if(autoStart.checked) toggle(true); // auto start next
+    }
+
+    function tick(){
+      if(remaining > 0){
+        remaining--; render(); updateProgress(); document.title = `${fmt(remaining)} • ${modeLabel(mode)}`;
+      } else {
+        clearInterval(timerId); timerId = null; startBtn.textContent = 'Start'; finishInterval();
+      }
+    }
+
+    function toggle(forceStart=false){
+      if(timerId && !forceStart){
+        clearInterval(timerId); timerId = null; startBtn.textContent='Start'; statusEl.textContent = modeLabel(mode) + ' • Paused';
+      } else {
+        if(remaining <= 0) remaining = total;
+        timerId = setInterval(tick, 1000); startBtn.textContent='Pause'; statusEl.textContent = modeLabel(mode) + ' • Running';
+      }
+    }
+
+    function reset(){
+      clearInterval(timerId); timerId = null; startBtn.textContent='Start';
+      remaining = total; render(); updateProgress(); statusEl.textContent = modeLabel(mode) + ' • Ready'; document.title = `⏱️ ${modeLabel(mode)} – ${fmt(remaining)}`;
+    }
+
+    function skip(){ remaining = 0; tick(); }
+
+    // Events
+    startBtn.addEventListener('click', () => toggle());
+    resetBtn.addEventListener('click', reset);
+    skipBtn.addEventListener('click', skip);
+
+    tabs.forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+
+    [workMin, shortMin, longMin].forEach(inp => {
+      inp.addEventListener('input', () => {
+        if(inp.value === '' || Number(inp.value) < 1) return; // ignore empty
+        if((mode==='work' && inp===workMin) || (mode==='short' && inp===shortMin) || (mode==='long' && inp===longMin)){
+          total = minsToSec(inp.value); remaining = total; render(); updateProgress();
+        }
+      })
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if(['INPUT'].includes(document.activeElement.tagName)){
+        if(e.code==='Space'){ e.preventDefault(); toggle(); }
+        if(e.code==='KeyR'){ reset(); }
+        return;
+      }
+      if(e.code==='Space'){ e.preventDefault(); toggle(); }
+      else if(e.code==='KeyR'){ reset(); }
+      else if(e.code==='ArrowRight'){ skip(); }
+    });
+
+    // Init
+    updateProgress(); render();
+    if('Notification' in window && Notification.permission==='default'){
+      // pre-warm permission UI hint (non-blocking)
+      setTimeout(() => Notification.requestPermission().catch(()=>{}), 500);
+    }
+  </script>
+</body>
+</html>
+
