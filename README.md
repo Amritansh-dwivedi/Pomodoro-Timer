@@ -1,2 +1,2 @@
 # Pomodoro-Timer
-Author-Amritasnh Dwivedi 
+Author-Amritasnh Dwivedi (srms)
